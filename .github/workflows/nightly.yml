@@ -1,0 +1,41 @@
+name: Nightly sort
+
+on:
+  schedule:
+    # 07:00 UTC is 2am Eastern in winter, 3am in summer.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print changes without writing to Notion
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: family-tasks
+  cancel-in-progress: false
+
+jobs:
+  run:
+    # Skips quietly until the repo is configured (e.g. in forks or this public copy).
+    if: vars.NOTION_DATA_SOURCE_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m family_tasks nightly
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NOTION_DATA_SOURCE_ID: ${{ vars.NOTION_DATA_SOURCE_ID }}
+          NOTION_SUMMARY_PAGE_ID: ${{ vars.NOTION_SUMMARY_PAGE_ID }}
+          # Manual runs follow the checkbox. Scheduled runs stay dry until the repo variable LIVE is "true".
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry_run) || (vars.LIVE == 'true' && 'false' || 'true') }}
